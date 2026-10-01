@@ -2,45 +2,36 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const Joi = require('joi');
+const { z } = require('zod');
 const User = require('../models/User');
 
-// Joi Validation Schemas
-const registerSchema = Joi.object({
-name: Joi.object({
-    first: Joi.string().required(),
-    middle: Joi.string().allow(''),
-    last: Joi.string().required()
-}).required(),
-isBusiness: Joi.boolean().required(),
-phone: Joi.string().required(),
-email: Joi.string().email().required(),
-password: Joi.string().min(8).required(),
-address: Joi.object({
-    state: Joi.string().allow(''),
-    country: Joi.string().required(),
-    city: Joi.string().required(),
-    street: Joi.string().required(),
-    houseNumber: Joi.number().required(),
-    zip: Joi.number().allow('', 0)
-}).required(),
-image: Joi.object({
-    url: Joi.string().allow(''),
-    alt: Joi.string().allow('')
+const cardSchema = z.object({
+title: z.string().min(1, "Title is required"),
+subtitle: z.string().min(1, "Subtitle is required"),
+description: z.string().min(1, "Description is required"),
+phone: z.string().min(1, "Phone is required"),
+email: z.string().email("Invalid email format"),
+web: z.string().optional(),
+image: z.object({
+    url: z.string().optional(),
+    alt: z.string().optional()
+}).optional(),
+address: z.object({
+    state: z.string().optional(),
+    country: z.string().min(1, "Country is required"),
+    city: z.string().min(1, "City is required"),
+    street: z.string().min(1, "Street is required"),
+    houseNumber: z.number(),
+    zip: z.number().optional()
 })
-});
-
-const loginSchema = Joi.object({
-email: Joi.string().email().required(),
-password: Joi.string().min(8).required()
 });
 
 // POST /users - Register a new user
 router.post('/', async (req, res) => {
 try {
-    // 1. Validate request body
-    const { error } = registerSchema.validate(req.body);
-    if (error) return res.status(400).send(error.details[0].message);
+
+const validation = RegisterSchema.safeParse(req.body);
+if (!validation.success) return res.status(400).send(validation.error.errors[0].message);
 
     // 2. Check if user already exists
     let user = await User.findOne({ email: req.body.email });
@@ -55,7 +46,7 @@ try {
 
     await user.save();
     
-    // Return user (usually best practice to omit the password from the response)
+    // Return user
     const { password, ...userWithoutPassword } = user.toObject();
     res.status(201).send(userWithoutPassword);
 } catch (err) {
@@ -66,9 +57,9 @@ try {
 // POST /users/login - Login and get token
 router.post('/login', async (req, res) => {
 try {
-    // 1. Validate request body
-    const { error } = loginSchema.validate(req.body);
-    if (error) return res.status(400).send(error.details[0].message);
+
+const validation = loginSchema.safeParse(req.body);
+if (!validation.success) return res.status(400).send(validation.error.errors[0].message);
 
     // 2. Find user by email
     const user = await User.findOne({ email: req.body.email });

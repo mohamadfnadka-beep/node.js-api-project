@@ -2,31 +2,31 @@
     const router = express.Router();
     const Card = require('../models/Card');
     const auth = require('../middleware/auth');
-    const Joi = require('joi');
+    const { z } = require('zod');
 
-    // Joi Validation Schema for Cards
-    const cardSchema = Joi.object({
-    title: Joi.string().required(),
-    subtitle: Joi.string().required(),
-    description: Joi.string().required(),
-    phone: Joi.string().required(),
-    email: Joi.string().email().required(),
-    web: Joi.string().allow(''),
-    image: Joi.object({
-        url: Joi.string().allow(''),
-        alt: Joi.string().allow('')
-    }),
-    address: Joi.object({
-        state: Joi.string().allow(''),
-        country: Joi.string().required(),
-        city: Joi.string().required(),
-        street: Joi.string().required(),
-        houseNumber: Joi.number().required(),
-        zip: Joi.number().allow('', 0)
-    }).required()
+
+    const cardSchema = z.object({
+    title: z.string().min(1, "Title is required"),
+    subtitle: z.string().min(1, "Subtitle is required"),
+    description: z.string().min(1, "Description is required"),
+    phone: z.string().min(1, "Phone is required"),
+    email: z.string().email("Invalid email format"),
+    web: z.string().optional(),
+    image: z.object({
+        url: z.string().optional(),
+        alt: z.string().optional()
+    }).optional(),
+    address: z.object({
+        state: z.string().optional(),
+        country: z.string().min(1, "Country is required"),
+        city: z.string().min(1, "City is required"),
+        street: z.string().min(1, "Street is required"),
+        houseNumber: z.number(),
+        zip: z.number().optional()
+    })
     });
 
-    // Helper function to generate a unique bizNumber[cite: 4]
+    // Helper function to generate a unique bizNumber
     const generateBizNumber = async () => {
     while (true) {
         let random = Math.floor(Math.random() * 9000000) + 1000000;
@@ -35,7 +35,7 @@
     }
     };
 
-    // 1. GET /cards - Get all cards (auth: all)[cite: 2]
+    // 1. GET /cards - Get all cards
     router.get('/', async (req, res) => {
     try {
         const cards = await Card.find();
@@ -45,7 +45,7 @@
     }
     });
 
-    // 2. GET /cards/my-cards - Get user cards (auth: registered user)[cite: 2]
+    // 2. GET /cards/my-cards - Get user cards
     router.get('/my-cards', auth, async (req, res) => {
     try {
         const cards = await Card.find({ user_id: req.user._id });
@@ -55,7 +55,7 @@
     }
     });
 
-    // 3. GET /cards/:id - Get specific card (auth: all)[cite: 2]
+    // 3. GET /cards/:id - Get specific card
     router.get('/:id', async (req, res) => {
     try {
         const card = await Card.findById(req.params.id);
@@ -66,13 +66,13 @@
     }
     });
 
-    // 4. POST /cards - Create new card (auth: Business user)[cite: 2]
+    // 4. POST /cards - Create new card
     router.post('/', auth, async (req, res) => {
     try {
         if (!req.user.isBusiness) return res.status(403).send('Only business users can create cards.');
 
-        const { error } = cardSchema.validate(req.body);
-        if (error) return res.status(400).send(error.details[0].message);
+    const validation = cardSchema.safeParse(req.body);
+    if (!validation.success) return res.status(400).send(validation.error.errors[0].message);
 
         let card = new Card({
         ...req.body,
@@ -87,11 +87,11 @@
     }
     });
 
-    // 5. PUT /cards/:id - Edit card (auth: User who created the card)[cite: 2]
+    // 5. PUT /cards/:id - Edit card 
     router.put('/:id', auth, async (req, res) => {
-    try {
-        const { error } = cardSchema.validate(req.body);
-        if (error) return res.status(400).send(error.details[0].message);
+        try {
+    const validation = cardSchema.safeParse(req.body);
+    if (!validation.success) return res.status(400).send(validation.error.errors[0].message);
 
         let card = await Card.findById(req.params.id);
         if (!card) return res.status(404).send('Card not found.');
@@ -107,7 +107,7 @@
     }
     });
 
-    // 6. PATCH /cards/:id - Like card (auth: registered user)[cite: 2]
+    // 6. PATCH /cards/:id - Like card
     router.patch('/:id', auth, async (req, res) => {
     try {
         let card = await Card.findById(req.params.id);
@@ -127,7 +127,7 @@
     }
     });
 
-    // 7. DELETE /cards/:id - Delete card (auth: Creator or Admin)[cite: 2]
+    // 7. DELETE /cards/:id -
     router.delete('/:id', auth, async (req, res) => {
     try {
         let card = await Card.findById(req.params.id);
